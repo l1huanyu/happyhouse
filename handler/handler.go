@@ -32,7 +32,7 @@ func (h *Handler) CheckSignature(c echo.Context) error {
 		log.Error("io.WriteString Error: " + err.Error())
 		return c.NoContent(http.StatusInternalServerError)
 	}
-	localSignature := string(s.Sum(nil))
+	localSignature := fmt.Sprintf("%x", s.Sum(nil))
 	if localSignature == signature {
 		return c.String(http.StatusOK, echostr)
 	}
