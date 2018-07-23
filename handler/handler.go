@@ -6,6 +6,10 @@ import (
 	"sort"
 
 	"github.com/labstack/echo"
+	"strings"
+	"github.com/labstack/gommon/log"
+	"fmt"
+	"io"
 )
 
 type (
@@ -18,21 +22,22 @@ func (h *Handler) CheckSignature(c echo.Context) error {
 	timestamp := c.QueryParam("timestamp")
 	nonce := c.QueryParam("nonce")
 	echostr := c.QueryParam("echostr")
-	arr := []string{TOKEN, timestamp, nonce}
+	sl := []string{TOKEN, timestamp, nonce}
 	//升序排序
-	sort.Strings(arr)
-	//拼接字符串
-	s := arr[0] + arr[1] + arr[2]
+	sort.Strings(sl)
 	//sha1加密
-	sha := sha1.New()
-	_, err := sha.Write([]byte(s))
+	s := sha1.New()
+	_, err := io.WriteString(s, strings.Join(sl, ""))
 	if err != nil {
-		return err
+		log.Error("io.WriteString Error: " + err.Error())
+		return c.NoContent(http.StatusInternalServerError)
 	}
-	shas := string(sha.Sum(nil))
-	if shas == signature {
+	localSignature := string(s.Sum(nil))
+	if localSignature == signature {
 		return c.String(http.StatusOK, echostr)
 	}
+	log.Info(fmt.Sprintf("Check Signature Error: signature = %s, timestamp = %s, nonce = %s, echostr = %s, " +
+		"localSignature = %s", signature, timestamp, nonce, echostr, localSignature))
 	return c.NoContent(http.StatusAccepted)
 }
 
