@@ -1,46 +1,50 @@
 package handler
 
 import (
-	"crypto/sha1"
-	"net/http"
-	"sort"
-
+	"github.com/l1huanyu/suren"
 	"github.com/labstack/echo"
-	"strings"
-	"github.com/labstack/gommon/log"
+	"net/http"
+	"time"
 	"fmt"
-	"io"
 )
 
 type (
 	Handler struct {
+		s *suren.Suren
 	}
 )
 
-func (h *Handler) CheckSignature(c echo.Context) error {
-	signature := c.QueryParam("signature")
-	timestamp := c.QueryParam("timestamp")
-	nonce := c.QueryParam("nonce")
+func New() *Handler {
+	h := new(Handler)
+	h.s = suren.New(APPID, SECRET, TOKEN)
+	return h
+}
+
+func (h *Handler) ResponseWeChat(c echo.Context) error {
 	echostr := c.QueryParam("echostr")
-	sl := []string{TOKEN, timestamp, nonce}
-	//升序排序
-	sort.Strings(sl)
-	//sha1加密
-	s := sha1.New()
-	_, err := io.WriteString(s, strings.Join(sl, ""))
-	if err != nil {
-		log.Error("io.WriteString Error: " + err.Error())
-		return c.NoContent(http.StatusInternalServerError)
-	}
-	localSignature := fmt.Sprintf("%x", s.Sum(nil))
-	if localSignature == signature {
+	if ok, err := h.s.CheckSignature(&suren.Signature{
+		Signature: c.QueryParam("signature"),
+		Timestamp: c.QueryParam("timestamp"),
+		Nonce:     c.QueryParam("nonce"),
+		Echostr:   echostr,
+	}); ok && err != nil {
 		return c.String(http.StatusOK, echostr)
 	}
-	log.Info(fmt.Sprintf("Check Signature Error: signature = %s, timestamp = %s, nonce = %s, echostr = %s, " +
-		"localSignature = %s", signature, timestamp, nonce, echostr, localSignature))
 	return c.NoContent(http.StatusAccepted)
 }
 
 func (h *Handler) ReceiveMessage(c echo.Context) error {
-	return c.String(http.StatusOK, "hello, welcome huanyu happy house!")
+	msgRx := new(suren.TextMsgRx)
+	err := c.Bind(msgRx)
+	if err != nil {
+		return err
+	}
+	msgTx := &suren.TextMsgTx{
+		ToUserName:   msgRx.FromUserName,
+		FromUserName: msgRx.ToUserName,
+		CreateTime:   int(time.Now().Unix()),
+		MsgType:      suren.TEXT,
+		Content:      fmt.Sprintf("收到消息\"%s\"。", msgRx.Content),
+	}
+	return c.XML(http.StatusOK, msgTx)
 }
